@@ -36,7 +36,7 @@ let
         {
           patches =
             attrs.patches or []
-            ++ prev.lib.optionals (prev.lib.versions.majorMinor args.version == "5.6") [
+            ++ prev.lib.optionals (prev.lib.versions.majorMinor args.version == "5.4") [
               # Patch to make it build with autoconf >= 2.72
               # Source: https://aur.archlinux.org/packages/php56-ldap?all_deps=1#comment-954506
               ./patches/php56-autoconf.patch
@@ -139,33 +139,5 @@ let
   mkPhp = args: prev.callPackage generic (_mkArgs args);
 in
 {
-  php56 = import ./php/5.6.nix { inherit prev mkPhp; };
-
-  php70 = import ./php/7.0.nix { inherit prev mkPhp; };
-
-  php71 = import ./php/7.1.nix { inherit prev mkPhp; };
-
-  php72 = import ./php/7.2.nix { inherit prev mkPhp; };
-
-  php73 = import ./php/7.3.nix { inherit prev mkPhp; };
-
-  php74 = import ./php/7.4.nix { inherit prev mkPhp; };
-
-  php80 = import ./php/8.0.nix { inherit prev mkPhp; };
-
-  php81 = prev.php81.override {
-    inherit packageOverrides;
-  };
-
-  php82 = prev.php82.override {
-    inherit packageOverrides;
-  };
-
-  php83 = prev.php83.override {
-    inherit packageOverrides;
-  };
-
-  php84 = prev.php84.override {
-    inherit packageOverrides;
-  };
+  php54 = import ./php/5.4.nix { inherit prev mkPhp; };
 }

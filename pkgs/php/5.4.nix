@@ -2,8 +2,8 @@
 
 let
   base = mkPhp {
-    version = "5.6.40";
-    hash = "sha256-/9Al00YjVTqy9/2Psh0Mnm+fow3FZcoDode3YwI/ugA=";
+    version = "5.4.45";
+    hash = "sha256-Tg0osVVMlc+upvorZKrIVDPxWM5yu1cbzVV0+Y9MZYI=";
   };
 in
 base.withExtensions (
@@ -19,7 +19,6 @@ base.withExtensions (
       exif
       fileinfo
       filter
-      ftp
       gd
       gettext
       gmp
@@ -28,16 +27,8 @@ base.withExtensions (
       json
       ldap
       mbstring
-      mysqli
-      mysqlnd
       opcache
-      openssl
       pcntl
-      pdo
-      pdo_mysql
-      pdo_odbc
-      pdo_pgsql
-      pdo_sqlite
       pgsql
       posix
       readline
@@ -48,13 +39,11 @@ base.withExtensions (
       sysvsem
       sqlite3
       tokenizer
+      xdebug
       xmlreader
       xmlwriter
       zip
       zlib
-    ]
-    ++ prev.lib.optionals (!prev.stdenv.isDarwin) [
-      imap
     ]
   )
 )

@@ -105,13 +105,13 @@ in
           upstreamPatches =
             attrs.patches or [];
 
-          ourPatches = lib.optionals (lib.versionOlder prev.php.version "7.2") [
+          ourPatches = lib.optionals (lib.versionAtLeast prev.php.version "5.6" && lib.versionOlder prev.php.version "7.2") [
             # Fix tests with libxml2 2.9.10.
             (pkgs.fetchpatch {
               url = "https://github.com/php/php-src/commit/e29922f054639a934f3077190729007896ae244c.patch";
               sha256 = "zC2QE6snAhhA7ItXgrc80WlDVczTlZEzgZsD7AS+gtw=";
             })
-          ] ++ lib.optionals (lib.versionOlder prev.php.version "7.4") [
+          ] ++ lib.optionals (lib.versionAtLeast prev.php.version "5.6" && lib.versionOlder prev.php.version "7.4") [
             (pkgs.fetchpatch {
               url = "https://github.com/php/php-src/commit/4cc261aa6afca2190b1b74de39c3caa462ec6f0b.patch";
               sha256 = "11qsdiwj1zmpfc2pgh6nr0sn7qa1nyjg4jwf69cgwnd57qfjcy4k";
@@ -218,7 +218,30 @@ in
         throw "php.extensions.ffi requires PHP version >= 7.4.";
 
     gd =
-      if lib.versionOlder prev.php.version "7.4" then
+      if (lib.versionAtLeast prev.php.version "5.4" && lib.versionOlder prev.php.version "5.6") then
+        prev.mkExtension {
+          name = "gd";
+
+          buildInputs = [
+            pkgs.gd
+            pkgs.libjpeg
+            pkgs.libpng
+            pkgs.zlib
+          ];
+
+          configureFlags = [
+            "--with-gd"
+            "--with-freetype-dir=${pkgs.freetype.dev}"
+            "--with-jpeg-dir=${pkgs.libjpeg.dev}"
+            "--with-png-dir=${pkgs.libpng.dev}"
+            "--with-zlib-dir=${pkgs.zlib.dev}"
+          ];
+
+          doCheck = false;
+
+          NIX_CFLAGS_COMPILE = " -Wno-error=implicit-function-declaration";
+        }
+      else if lib.versionOlder prev.php.version "7.4" then
         prev.mkExtension {
           name = "gd";
 
@@ -236,8 +259,8 @@ in
             "--with-freetype-dir=${pkgs.freetype.dev}"
             "--with-jpeg-dir=${pkgs.libjpeg.dev}"
             "--with-png-dir=${pkgs.libpng.dev}"
-            "--with-webp-dir=${pkgs.libwebp}"
             "--with-xpm-dir=${pkgs.xorg.libXpm.dev}"
+            "--with-webp-dir=${pkgs.libwebp}"
             "--with-zlib-dir=${pkgs.zlib.dev}"
             "--enable-gd-jis-conv"
           ];
@@ -294,7 +317,9 @@ in
 
     intl = prev.extensions.intl.overrideAttrs (attrs: {
       buildInputs =
-        if lib.versionOlder prev.php.version "8.1.0" then
+        if lib.versionOlder prev.php.version "5.6" then
+          (builtins.filter (pkg: pkg != pkgs.icu73) attrs.buildInputs) ++ [ pkgs.icu60 ]
+        else if lib.versionOlder prev.php.version "8.1.0" then
           (builtins.filter (pkg: pkg != pkgs.icu73) attrs.buildInputs) ++ [ pkgs.icu64 ]
         else
           attrs.buildInputs;
@@ -305,7 +330,7 @@ in
             attrs.patches or [];
 
           ourPatches =
-            lib.optionals (lib.versionOlder prev.php.version "7.1") [
+            lib.optionals (lib.versionAtLeast prev.php.version "5.6" && lib.versionOlder prev.php.version "7.1") [
               # Fix build with newer ICU.
               (pkgs.fetchpatch {
                 url = "https://github.com/php/php-src/commit/8d35a423838eb462cd39ee535c5d003073cc5f22.patch";
@@ -316,7 +341,7 @@ in
                 '';
               })
             ]
-            ++ lib.optionals (lib.versionOlder prev.php.version "7.4") [
+            ++ lib.optionals (lib.versionAtLeast prev.php.version "5.6" && lib.versionOlder prev.php.version "7.4") [
               # Fix aarch64 build
               # Introduced in https://github.com/NixOS/nixpkgs/commit/30e812c6c09e1b971dc902399f3dc39d542d89d9
               (pkgs.fetchpatch {
@@ -337,7 +362,7 @@ in
             attrs.patches or [];
 
           ourPatches =
-            lib.optionals (lib.versionOlder prev.php.version "8.0") [
+            lib.optionals (lib.versionAtLeast prev.php.version "5.6" && lib.versionOlder prev.php.version "8.0") [
               # Header path defaults to FHS location, preventing the configure script from detecting errno support.
               ./patches/iconv-header-path.patch
             ];
@@ -492,39 +517,6 @@ in
       else
         throw "php.extensions.mysql requires PHP version < 7.0.";
 
-    mysqli =
-      if lib.versionOlder prev.php.version "7.0" then
-        prev.extensions.mysqli.overrideAttrs (attrs: {
-          # the --with-mysql-sock option didn't exist in php 5.6
-          NIX_CFLAGS_COMPILE = "-DPHP_MYSQL_UNIX_SOCK_ADDR=\"/run/mysqld/mysqld.sock\"";
-        })
-      else
-        prev.extensions.mysqli;
-
-    mysqlnd = prev.extensions.mysqlnd.overrideAttrs (attrs: {
-      patches =
-        attrs.patches or []
-        ++ lib.optionals (lib.versionOlder prev.php.version "7.4") [
-          # Introduced in https://github.com/NixOS/nixpkgs/commit/2e0d4a8b39a03a0db0c6c3622473d333a44d1ec1
-          ./patches/mysqlnd_fix_compression.patch
-        ];
-
-      postPatch =
-        attrs.postPatch or ""
-        + lib.optionalString (lib.versionOlder prev.php.version "7.1") ''
-          # Fix mysqlnd not being able to find headers.
-          ln -s $PWD/ext/ ext/mysqlnd
-        '';
-
-      preConfigure =
-        attrs.preConfigure or ""
-        + lib.optionalString (lib.versionOlder prev.php.version "7.4") ''
-          substituteInPlace configure \
-            --replace '$OPENSSL_LIBDIR' '${pkgs.openssl}/lib' \
-            --replace '$OPENSSL_INCDIR' '${pkgs.openssl.dev}/include'
-        '';
-    });
-
     oci8 =
       if lib.versionOlder prev.php.version "7.0" then
         prev.extensions.oci8.overrideAttrs (attrs: {
@@ -545,55 +537,42 @@ in
       else
         prev.extensions.oci8;
 
-    opcache = prev.extensions.opcache.overrideAttrs (attrs: {
-      patches =
-        attrs.patches or []
-        ++ lib.optionals (lib.versionAtLeast prev.php.version "7.0" && lib.versionOlder prev.php.version "7.4") [
-          # Introduced in https://github.com/NixOS/nixpkgs/commit/2e0d4a8b39a03a0db0c6c3622473d333a44d1ec1
-          ./patches/zend_file_cache_config.patch
+    opcache = if lib.versionOlder prev.php.version "5.6" then
+      final.callPackage ./extensions/opcache/php5.4-7.0.2.nix { }
+    else
+      prev.extensions.opcache.overrideAttrs (attrs: {
+        patches =
+          attrs.patches or []
+          ++ lib.optionals (lib.versionAtLeast prev.php.version "7.0" && lib.versionOlder prev.php.version "7.4") [
+            # Introduced in https://github.com/NixOS/nixpkgs/commit/2e0d4a8b39a03a0db0c6c3622473d333a44d1ec1
+            ./patches/zend_file_cache_config.patch
+          ];
+
+        doCheck = lib.versionAtLeast prev.php.version "7.4";
+
+        postPatch =
+          removeLines
+            (lib.optionals (lib.versionAtLeast prev.php.version "5.4" && lib.versionOlder prev.php.version "5.6" && pkgs.stdenv.isDarwin) [
+              "rm ext/opcache/tests/blacklist.phpt"
+              "rm ext/opcache/tests/bug66338.phpt"
+              "rm ext/opcache/tests/issue0115.phpt"
+              "rm ext/opcache/tests/issue0149.phpt"
+              "rm ext/opcache/tests/revalidate_path_01.phpt"
+            ] ++ lib.optionals (lib.versionOlder prev.php.version "7.2.20" && pkgs.stdenv.isDarwin) [
+              "rm ext/opcache/tests/bug78106.phpt"
+            ])
+            attrs.postPatch;
+        
+        preConfigurePhases = [
+          "foo"
+          "genfiles"
+          "cdToExtensionRootPhase"
         ];
 
-      doCheck = lib.versionAtLeast prev.php.version "7.4";
-
-      postPatch =
-        removeLines
-          (lib.optionals (lib.versionOlder prev.php.version "7.2.20" && pkgs.stdenv.isDarwin) [
-            "rm ext/opcache/tests/bug78106.phpt"
-          ])
-          attrs.postPatch;
-    });
-
-    openssl = prev.extensions.openssl.overrideAttrs (attrs: {
-      patches =
-        let
-          upstreamPatches =
-            attrs.patches or [];
-
-          ourPatches =
-            lib.optionals (lib.versionOlder prev.php.version "7.0") [
-              # PHP ≤ 5.6 requires openssl 1.0.
-              # https://github.com/php-build/php-build/pull/609
-              # https://github.com/oerdnj/deb.sury.org/issues/566
-              (pkgs.fetchurl {
-                url = "https://github.com/php-build/php-build/raw/43c8e02689bc29d48daa338b73bcd4f2bbd8def1/share/php-build/patches/php-5.6-support-openssl-1.1.0.patch";
-                sha256 = "UHu3SyYSMozfXlm5ZGRaSdD5NnrdAB7NaY4P0NREVCE=";
-              })
-            ];
-        in
-        ourPatches ++ upstreamPatches;
-
-      buildInputs =
-        let
-          replaceOpenssl = pkg:
-            if pkg.pname == "openssl" && lib.versionOlder prev.php.version "8.1" then
-              pkgs.openssl_1_1.overrideAttrs (old: {
-                meta = builtins.removeAttrs old.meta [ "knownVulnerabilities" ];
-              })
-            else
-              pkg;
-        in
-        builtins.map replaceOpenssl attrs.buildInputs;
-    });
+        foo = ''
+          mkdir -p "ext/opcache"
+        '';
+      });
 
     openswoole =
       if lib.versionOlder prev.php.version "7.2" then
@@ -627,7 +606,7 @@ in
             attrs.patches or [];
 
           ourPatches =
-            lib.optionals (lib.versionOlder prev.php.version "7.2") [
+            lib.optionals (lib.versionAtLeast prev.php.version "5.6" && lib.versionOlder prev.php.version "7.2") [
               # Fix Darwin builds on 7.1
               (pkgs.fetchpatch {
                 url = "https://github.com/php/php-src/commit/11eed9f3ba7429be467b54d8407cfbd6bd7e6f3a.patch";
@@ -879,6 +858,15 @@ in
             src = pkgs.fetchurl {
               url = "http://pecl.php.net/get/xdebug-2.7.2.tgz";
               sha256 = "19m40n5h339yk0g458zpbsck1lslhnjsmhrp076kzhl5l4x2iwxh";
+            };
+          })
+      else if lib.versionAtLeast prev.php.version "5.4" then
+        prev.extensions.xdebug.overrideAttrs (attrs: {
+            name = "xdebug-2.4.1";
+            version = "2.4.1";
+            src = pkgs.fetchurl {
+              url = "http://pecl.php.net/get/xdebug-2.4.1.tgz";
+              sha256 = "sha256-I8h4bg9armex5QNZcr//KCcQ+4TEg4h8686471u9+O8=";
             };
           })
       else
